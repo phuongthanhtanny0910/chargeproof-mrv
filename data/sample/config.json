@@ -1,0 +1,13 @@
+{
+  "period_start": "2026-10-12T16:00:00Z",
+  "period_end": "2026-10-13T08:00:00Z",
+  "interval_hours": 0.25,
+  "demand_charge_eur_per_kw_year": 100,
+  "period_months": 1,
+  "annual_emission_factor": 0.38,
+  "annual_emission_factor_source": "ILLUSTRATIVE placeholder - replace with latest published UBA factor",
+  "grid_connection_limit_kw": 60,
+  "notes": {
+    "data": "Synthetic sample matching ChargeProof_MRV_hand_calculation.xlsx. Not real results."
+  }
+}
