@@ -144,3 +144,49 @@ def test_duplicate_session_is_dropped(tmp_path):
     pd.concat([s, dup]).to_csv(d / "sessions.csv", index=False)
     r = run(d, tmp_path / "out")
     assert r["data_quality"]["sessions_used"] == 5
+
+
+# ---------------------------------------------------------------- time zones
+
+def _to_berlin_local(d: Path) -> None:
+    """Rewrite every timestamp column as naive Berlin local time (no offset)."""
+    cols = {"sessions.csv": ["plug_in", "plug_out"], "meter_values.csv": ["interval_start"],
+            "grid_meter.csv": ["interval_start"], "prices.csv": ["interval_start"],
+            "factors.csv": ["interval_start"]}
+    for name, tcols in cols.items():
+        df = pd.read_csv(d / name)
+        for c in tcols:
+            ts = pd.to_datetime(df[c], utc=True).dt.tz_convert("Europe/Berlin")
+            df[c] = ts.dt.strftime("%Y-%m-%dT%H:%M:%S")
+        df.to_csv(d / name, index=False)
+
+
+def test_local_time_zone_gives_same_results_as_utc(tmp_path):
+    d = copy_sample(tmp_path)
+    _to_berlin_local(d)
+    patch_config(d, local_timezone="Europe/Berlin")
+    k_local = run(d, tmp_path / "out_local")["kpis"]
+    k_utc = run(SAMPLE, tmp_path / "out_utc")["kpis"]
+    assert k_local["K1_energy_shifted_kwh"] == pytest.approx(k_utc["K1_energy_shifted_kwh"])
+    assert k_local["K2_peak_kw"]["actual"] == pytest.approx(k_utc["K2_peak_kw"]["actual"])
+    assert k_local["K3_cost_eur"]["total"]["difference"] == pytest.approx(k_utc["K3_cost_eur"]["total"]["difference"])
+
+
+def test_naive_time_without_zone_is_rejected(tmp_path):
+    d = copy_sample(tmp_path)
+    _to_berlin_local(d)
+    with pytest.raises(ValueError, match="local_timezone"):
+        run(d, tmp_path / "out")
+
+
+def test_ambiguous_clock_change_is_rejected():
+    from chargeproof_mrv.ingest import parse_utc
+    # 25 Oct 2026, 02:30 happens twice in Berlin (end of summer time)
+    with pytest.raises(ValueError, match="ambiguous"):
+        parse_utc(pd.Series(["2026-10-25T02:30:00"]), "Europe/Berlin")
+
+
+def test_mixed_offset_formats_are_rejected():
+    from chargeproof_mrv.ingest import parse_utc
+    with pytest.raises(ValueError, match="mix"):
+        parse_utc(pd.Series(["2026-10-12T16:00:00Z", "2026-10-12T18:00:00"]), "Europe/Berlin")

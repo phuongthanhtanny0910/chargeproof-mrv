@@ -35,7 +35,7 @@ def run(data_dir: str | Path, out_dir: str | Path, run_id: str | None = None) ->
     manifest = store_raw(data_dir, raw_dir)
 
     cfg = Config.load(raw_dir / "config.json")
-    inputs = load(raw_dir, manifest)
+    inputs = load(raw_dir, manifest, cfg.local_timezone)
     q = run_checks(inputs, cfg)
 
     grid = cfg.expected_intervals()

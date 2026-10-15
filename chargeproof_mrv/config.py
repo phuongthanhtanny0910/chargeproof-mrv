@@ -28,6 +28,9 @@ class Config:
     annual_emission_factor: Optional[float] = None
     annual_emission_factor_source: str = ""
 
+    # Time zone of timestamps without a UTC offset (IANA name, e.g. "Europe/Berlin"). Optional.
+    local_timezone: Optional[str] = None
+
     # Optional information
     grid_connection_limit_kw: Optional[float] = None
 

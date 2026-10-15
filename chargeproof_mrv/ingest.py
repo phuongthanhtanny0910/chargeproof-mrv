@@ -9,7 +9,8 @@ Expected files in the data folder:
     prices.csv         energy price per interval (€/kWh, net)
     factors.csv        hourly grid emission factor per interval (kg CO2e/kWh), optional
 
-All timestamps are ISO 8601 in UTC.
+Timestamps are ISO 8601. Either include a UTC offset (Z or +02:00), or leave them
+out and set `local_timezone` (e.g. "Europe/Berlin") in config.json.
 """
 
 from __future__ import annotations
@@ -70,22 +71,44 @@ def store_raw(data_dir: Path, raw_dir: Path) -> dict:
     return manifest
 
 
-def _ts(series: pd.Series) -> pd.Series:
-    return pd.to_datetime(series, utc=True)
+_HAS_OFFSET = r"(?:Z|[+-]\d{2}:?\d{2})$"
 
 
-def load(raw_dir: Path, manifest: dict) -> Inputs:
+def parse_utc(series: pd.Series, local_tz: str | None = None) -> pd.Series:
+    """Parse timestamps to UTC.
+
+    Timestamps with an explicit offset (``Z``, ``+02:00``) are converted as they are.
+    Timestamps without an offset are read as local time in ``local_tz``; ambiguous
+    (autumn clock change) or non-existent (spring clock change) times raise an error
+    rather than being guessed, because a guess would silently shift a 15-minute interval.
+    """
+    text = series.astype(str).str.strip()
+    has = text.str.contains(_HAS_OFFSET, regex=True)
+    if has.all():
+        return pd.to_datetime(text, utc=True)
+    if has.any():
+        raise ValueError("Timestamps mix values with and without UTC offset; use one format per file")
+    if local_tz is None:
+        raise ValueError("Timestamps have no UTC offset: set 'local_timezone' in config.json or use UTC (Z)")
+    naive = pd.to_datetime(text, utc=False)
+    try:
+        return naive.dt.tz_localize(local_tz, ambiguous="raise", nonexistent="raise").dt.tz_convert("UTC")
+    except Exception as exc:
+        raise ValueError(f"Local time in '{local_tz}' is ambiguous or does not exist (clock change): {exc}") from exc
+
+
+def load(raw_dir: Path, manifest: dict, local_tz: str | None = None) -> Inputs:
     sessions = pd.read_csv(raw_dir / "sessions.csv")
     missing = [c for c in SESSION_COLUMNS if c not in sessions.columns]
     if missing:
         raise ValueError(f"sessions.csv is missing columns: {missing}")
-    sessions["plug_in"] = _ts(sessions["plug_in"])
-    sessions["plug_out"] = _ts(sessions["plug_out"])
+    sessions["plug_in"] = parse_utc(sessions["plug_in"], local_tz)
+    sessions["plug_out"] = parse_utc(sessions["plug_out"], local_tz)
     for c in ["energy_kwh", "charger_rating_kw", "vehicle_limit_kw", "observed_max_kw"]:
         sessions[c] = pd.to_numeric(sessions[c], errors="coerce")
 
     mv = pd.read_csv(raw_dir / "meter_values.csv")
-    mv["interval_start"] = _ts(mv["interval_start"])
+    mv["interval_start"] = parse_utc(mv["interval_start"], local_tz)
     mv["energy_kwh"] = pd.to_numeric(mv["energy_kwh"], errors="coerce")
 
     def optional(name: str, value_col: str) -> pd.DataFrame | None:
@@ -93,7 +116,7 @@ def load(raw_dir: Path, manifest: dict) -> Inputs:
         if not p.exists():
             return None
         df = pd.read_csv(p)
-        df["interval_start"] = _ts(df["interval_start"])
+        df["interval_start"] = parse_utc(df["interval_start"], local_tz)
         df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
         return df
 

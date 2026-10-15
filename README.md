@@ -42,7 +42,7 @@ Each run creates:
 | `prices.csv` | interval_start, price_eur_per_kwh | for energy cost |
 | `factors.csv` | interval_start, kg_co2e_per_kwh | for hourly emissions |
 
-All timestamps are ISO 8601 in UTC. `vehicle_limit_kw` and `observed_max_kw` may be empty; if `observed_max_kw` is empty, the maximum 15-minute power in the run's own meter values is used.
+Timestamps are ISO 8601. Either include a UTC offset (`Z`, `+02:00`), or omit it and set `local_timezone` (e.g. `"Europe/Berlin"`) in `config.json`. Ambiguous local times at clock changes are rejected, not guessed. `vehicle_limit_kw` and `observed_max_kw` may be empty; if `observed_max_kw` is empty, the maximum 15-minute power in the run's own meter values is used.
 
 ## Where each rule lives
 
@@ -66,7 +66,6 @@ All timestamps are ISO 8601 in UTC. `vehicle_limit_kw` and `observed_max_kw` may
 ## Not yet implemented (v0.1)
 
 - Direct OCPP or charge-point-operator API ingestion (CSV export only)
-- Time-zone conversion from local meter exports (inputs must already be UTC)
 - Battery storage or on-site PV inside the boundary
 - Signed meter value (OCMF) verification
 
